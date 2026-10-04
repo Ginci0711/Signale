@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Signale</title>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Signale">
+<meta name="theme-color" content="#0E0D0C">
+<style>
+  :root{
+    --bg:#0E0D0C; --card:#19160F; --card-border:#2C271B;
+    --text:#EDE9E2; --muted:#9C958A;
+    --gold:#C9A227; --buy:#4C9A6B; --sell:#B5524A; --neutral:#7C766B;
+    box-sizing:border-box;
+    padding-top:env(safe-area-inset-top,0px);
+    padding-bottom:env(safe-area-inset-bottom,0px);
+  }
+  *{box-sizing:inherit}
+  html{scroll-padding-top:env(safe-area-inset-top,0px); height:100%}
+  body{
+    height:100%; margin:0; background:var(--bg); color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  header{
+    padding:28px 20px 16px;
+    border-bottom:1px solid var(--card-border);
+  }
+  header h1{
+    margin:0 0 4px; font-size:22px; font-weight:650; letter-spacing:-0.02em;
+  }
+  header p{margin:0; color:var(--muted); font-size:13px}
+  main{padding:16px; max-width:640px; margin:0 auto; padding-bottom:48px}
+  .asset{
+    background:var(--card); border:1px solid var(--card-border);
+    border-radius:14px; padding:16px; margin-bottom:12px;
+  }
+  .asset-head{display:flex; justify-content:space-between; align-items:baseline; margin-bottom:12px}
+  .asset-head .name{font-size:17px; font-weight:650}
+  .asset-head .price{font-size:14px; color:var(--muted); font-variant-numeric:tabular-nums}
+  .pills{display:flex; gap:8px}
+  .pill{
+    flex:1; border-radius:10px; padding:10px 8px; text-align:center;
+    border:1px solid var(--card-border); cursor:pointer;
+  }
+  .pill .h{font-size:10.5px; color:var(--muted); margin-bottom:4px}
+  .pill .rec{font-size:12.5px; font-weight:650}
+  .rec.buy, .rec.strongbuy{color:var(--buy)}
+  .rec.sell, .rec.strongsell{color:var(--sell)}
+  .rec.neutral{color:var(--neutral)}
+  .details{
+    margin-top:12px; padding-top:12px; border-top:1px solid var(--card-border);
+    display:none; font-size:12.5px; color:var(--muted); line-height:1.6;
+  }
+  .details.open{display:block}
+  .details b{color:var(--text); font-weight:600}
+  .bt{margin-top:6px; color:var(--muted)}
+  .empty{text-align:center; color:var(--muted); padding:60px 20px; font-size:14px}
+  .disclaimer{
+    color:var(--muted); font-size:11px; line-height:1.6; padding:20px 4px 4px;
+    text-align:center;
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>Gold · Silber · Krypto Signale</h1>
+  <p id="stand">lädt…</p>
+</header>
+<main id="main">
+  <div class="empty">Lade Daten…</div>
+</main>
+
+<script>
+function recClass(rec){
+  if(!rec) return 'neutral';
+  rec = rec.toUpperCase();
+  if(rec.includes('STARKER KAUF')) return 'strongbuy';
+  if(rec.includes('KAUF')) return 'buy';
+  if(rec.includes('STARKER VERKAUF')) return 'strongsell';
+  if(rec.includes('VERKAUF')) return 'sell';
+  return 'neutral';
+}
+
+function renderDetails(h){
+  let out = '';
+  for (const [k,v] of Object.entries(h.details || {})){
+    out += `<div><b>${k}:</b> ${v}</div>`;
+  }
+  if (h.backtest && h.backtest.anzahl_bullische_signale !== undefined){
+    const bt = h.backtest;
+    out += `<div class="bt">Backtest – bullisch: ${bt.anzahl_bullische_signale} Fälle, `
+         + `${bt['trefferquote_bullish_%']?.toFixed(1)}% trafen zu, `
+         + `Ø ${bt['avg_return_bullish_%']?.toFixed(2)}%</div>`;
+    out += `<div class="bt">Backtest – bearish: ${bt.anzahl_bearishe_signale} Fälle, `
+         + `${bt['trefferquote_bearish_%']?.toFixed(1)}% trafen zu, `
+         + `Ø ${bt['avg_return_bearish_%']?.toFixed(2)}%</div>`;
+  }
+  return out || '<div>Keine Details verfügbar.</div>';
+}
+
+function renderAsset(name, a){
+  const el = document.createElement('div');
+  el.className = 'asset';
+
+  if (a.fehler){
+    el.innerHTML = `<div class="asset-head"><span class="name">${name}</span></div>
+                     <div class="details open">Fehler beim letzten Lauf: ${a.fehler}</div>`;
+    return el;
+  }
+
+  const horizonte = a.horizonte || {};
+  const order = ['kurz','mittel','lang'];
+  const pills = order.filter(k=>horizonte[k]).map(k=>{
+    const h = horizonte[k];
+    const cls = recClass(h.empfehlung);
+    const kurzlabel = {kurz:'1 Monat', mittel:'6 Monate', lang:'12-24 Mon.'}[k];
+    return `<div class="pill" data-key="${k}">
+              <div class="h">${kurzlabel}</div>
+              <div class="rec ${cls}">${h.empfehlung}</div>
+            </div>`;
+  }).join('');
+
+  el.innerHTML = `
+    <div class="asset-head">
+      <span class="name">${name}</span>
+      <span class="price">${a.letzter_kurs ?? ''}</span>
+    </div>
+    <div class="pills">${pills}</div>
+    <div class="details"></div>
+  `;
+
+  const detailsEl = el.querySelector('.details');
+  el.querySelectorAll('.pill').forEach(p=>{
+    p.addEventListener('click', ()=>{
+      const key = p.dataset.key;
+      const h = horizonte[key];
+      detailsEl.innerHTML = renderDetails(h);
+      detailsEl.classList.add('open');
+    });
+  });
+
+  return el;
+}
+
+fetch('./results.json?t=' + Date.now())
+  .then(r=>{ if(!r.ok) throw new Error('results.json nicht gefunden'); return r.json(); })
+  .then(data=>{
+    document.getElementById('stand').textContent =
+      'Stand: ' + new Date(data.generiert_am).toLocaleString('de-DE');
+    const main = document.getElementById('main');
+    main.innerHTML = '';
+    Object.entries(data.assets || {}).forEach(([name, a])=>{
+      main.appendChild(renderAsset(name, a));
+    });
+    const disc = document.createElement('div');
+    disc.className = 'disclaimer';
+    disc.textContent = 'Keine Anlageberatung. Rein technische Analyse historischer Kursdaten. Kauf/Verkauf auf eigenes Risiko.';
+    main.appendChild(disc);
+  })
+  .catch(err=>{
+    document.getElementById('stand').textContent = '';
+    document.getElementById('main').innerHTML =
+      `<div class="empty">Noch keine Daten vorhanden.<br>Der erste automatische Lauf kommt gleich – oder prüfe, ob die GitHub Action schon einmal gelaufen ist.</div>`;
+  });
+</script>
+</body>
+</html>
